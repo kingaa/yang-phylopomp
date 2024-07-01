@@ -1,0 +1,15 @@
+tmp
+.Rhistory
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.o
+*.so
+*.tex
+.DS_Store
+*.nav
+*.snm
+*.toc
+*.brf
