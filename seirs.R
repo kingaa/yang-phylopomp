@@ -6,8 +6,8 @@ set.seed(353691151)
 
 seirs_params <- data.frame(
   Beta=3,sigma=1,gamma=0.5,psi=0.02,omega=0.08,
-  S0=70,E0=1,I0=0,R0=50,
-  time=400
+  S0=50,E0=4,I0=3,R0=50,
+  time=100
 )
 
 bake(
@@ -41,7 +41,7 @@ plot_grid(
   axis="btlr"
 )
 
-dev.off()
+#dev.off()
 
 seirs_params |>
   with(
@@ -68,15 +68,21 @@ bake(
   {
     library(iterators)
     library(doFuture)
-    plan(multicore)
+    plan(multisession)
     ## cl <- makeClusterMPI(250,autostop=TRUE,verbose=FALSE)
     ## plan(cluster,workers=cl)
     foreach (
       p=iter(params,"row")
     ) %dofuture% {
-      library(phylopomp)
+       library(phylopomp)
       po |>
-        pfilter(params=p,Np=1e4)
+        mif2(
+          params=p, 
+          Np=1000, 
+          Nmif=50, 
+          cooling.fraction.50=0.5, # can try increasing to lower noise
+          rw.sd=rw_sd(Beta = 0.02, sigma = 0.01, gamma = 0.005) 
+        )
     } %seed% TRUE |>
       concat()
   }
@@ -84,7 +90,25 @@ bake(
 
 attr(pfs,"system.time")
 
+pfs |>
+  traces() |>
+  melt() |>
+  ggplot(aes(x=iteration,y=value,group=.L1,color=factor(.L1)))+
+  geom_line()+
+  guides(color="none")+
+  facet_wrap(~name,scales="free_y")
+
 plot(pfs)
+
+foreach(mf=pfs,.combine=rbind,
+        .options.future=list(seed=900242057)
+) %dofuture% {
+  evals <- replicate(10, logLik(pfilter(mf,Np=5000)))
+  ll <- logmeanexp(evals,se=TRUE)
+  mf |> coef() |> bind_rows() |>
+    bind_cols(loglik=ll[1],loglik.se=ll[2])
+} -> results
+
 
 ## seirs_tree |>
 ##   curtail(time=1.28) |>
@@ -131,3 +155,4 @@ plot_grid(
 )
 
 dev.off()
+
