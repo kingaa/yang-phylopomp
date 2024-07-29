@@ -41,7 +41,7 @@ plot_grid(
   axis="btlr"
 )
 
-#dev.off()
+## dev.off()
 
 seirs_params |>
   with(
@@ -53,12 +53,15 @@ seirs_params |>
   ) -> po
 
 seirs_params |>
-  select(-sigma,-time) |>
+  select(-time,-sigma) |>
   expand_grid(
-    sigma=seq(0.2,2,length.out=25),
-    rep=seq_len(8)
+    sigma=seq(0.5,1.5,by=0.1),
+    rep=seq_len(4)
   ) |>
-  mutate(N=S0+E0+I0+R0) |>
+  mutate(
+    gamma=2,
+    N=S0+E0+I0+R0
+  ) |>
   collect() -> params
 
 bake(
@@ -74,14 +77,16 @@ bake(
     foreach (
       p=iter(params,"row")
     ) %dofuture% {
-       library(phylopomp)
+      library(phylopomp)
       po |>
         mif2(
-          params=p, 
-          Np=1000, 
-          Nmif=50, 
-          cooling.fraction.50=0.5, # can try increasing to lower noise
-          rw.sd=rw_sd(Beta = 0.02, sigma = 0.01, gamma = 0.005) 
+          params=p,
+          Np=1000,
+          Nmif=10,
+          cooling.fraction.50=0.05, # can try decreasing to lower noise
+          rw.sd=rw_sd(Beta = 0.02, gamma = 0.02),
+          partrans=parameter_trans(log=c("Beta","gamma")),
+          paramnames=c("Beta","gamma")
         )
     } %seed% TRUE |>
       concat()
@@ -90,18 +95,32 @@ bake(
 
 attr(pfs,"system.time")
 
+## IF2 trace plots
 pfs |>
   traces() |>
   melt() |>
+  filter(name %in% c("Beta","sigma","gamma","loglik")) |>
   ggplot(aes(x=iteration,y=value,group=.L1,color=factor(.L1)))+
   geom_line()+
   guides(color="none")+
   facet_wrap(~name,scales="free_y")
 
+## make a profile likelihood plot
+bind_cols(
+  pfs |>
+    coef() |>
+    melt() |>
+    pivot_wider(),
+  logLik=logLik(pfs)
+) |>
+  ggplot(aes(x=sigma,y=logLik))+
+  geom_point()+
+  theme_bw()
+
 plot(pfs)
 
 foreach(mf=pfs,.combine=rbind,
-        .options.future=list(seed=900242057)
+  .options.future=list(seed=900242057)
 ) %dofuture% {
   evals <- replicate(10, logLik(pfilter(mf,Np=5000)))
   ll <- logmeanexp(evals,se=TRUE)
@@ -155,4 +174,3 @@ plot_grid(
 )
 
 dev.off()
-
