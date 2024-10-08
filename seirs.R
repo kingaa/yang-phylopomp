@@ -2,11 +2,11 @@ library(tidyverse)
 library(phylopomp)
 library(pomp)
 theme_set(theme_bw())
-#set.seed(353691151)
+set.seed(353691151)
 
 seirs_params <- data.frame(
   Beta=3,sigma=1,gamma=0.5,psi=0.02,omega=0.08,
-  S0=200,E0=10,I0=5,R0=50,
+  S0=20,E0=10,I0=1,R0=50,
   time=100
 )
 
@@ -49,20 +49,18 @@ seirs_params |>
   with(
     seirs_tree |>
       seirs_pomp(
-        Beta=6,sigma=sigma,gamma=gamma,psi=psi,omega=omega,
+        Beta=Beta,sigma=sigma,gamma=gamma,psi=psi,omega=omega,
         S0=S0,E0=E0,I0=I0,R0=R0
       )
   ) -> po
 
 seirs_params |>
-  select(-time,-sigma, -Beta) |>
+  select(-time) |>
   expand_grid(
-    sigma=seq(0.5,1.5,by=0.3),
-    Beta = seq(1, 6, by=0.5),
-    rep=seq_len(1)
+    rep=seq_len(200)
   ) |>
   mutate(
-    gamma=2,
+
     N=S0+E0+I0+R0
   ) |>
   collect() -> params
@@ -85,7 +83,7 @@ bake(
         mif2(
           params=p,
           Np=5000,
-          Nmif=1,
+          Nmif=10,
           cooling.fraction.50=0.25, # can try decreasing to lower noise
           rw.sd=rw_sd(Beta = 0.02, gamma = 0.02, sigma = 0.02),
           partrans=parameter_trans(log=c("Beta","gamma", "sigma")),
@@ -107,58 +105,16 @@ pfs |>
   guides(color="none")+
   facet_wrap(~name,scales="free_y")
 
-x = pfs[[1]]
-pfs2 <- continue(x, Np=5000,
-         Nmif=10,                        
-         cooling.fraction.50=0.25,        
-         rw.sd=rw_sd(Beta = 2, gamma = 2), 
-         partrans=parameter_trans(log=c("Beta","gamma")),
-         paramnames=c("Beta","gamma"))
-pfs |>
-  traces() |>
-  melt() |>
-  filter(name %in% c("Beta","sigma","gamma","loglik")) |>
-  ggplot(aes(x=iteration,y=value,group=.L1,color=factor(.L1)))+
-  geom_line()+
-  guides(color="none")+
-  facet_wrap(~name,scales="free_y")
+foreach(mf=pfs,.combine=rbind,
+        .options.future=list(seed=900242057)
+) %dofuture% {
+  evals <- replicate(10, logLik(pfilter(mf,Np=5000)))
+  ll <- logmeanexp(evals,se=TRUE)
+  mf |> coef() |> bind_rows() |>
+    bind_cols(loglik=ll[1],loglik.se=ll[2])
+} -> results
 
-
-bake(
-  file="seirs2_run1.rds",
-  dependson=list(pfs, params, seirs_tree), # Update to depend on previous results
-  seed=751601556,
-  {
-    foreach (
-      p=iter(params,"row")
-    ) %dofuture% {
-      library(phylopomp)
-      po |>
-        continue(
-          params=p,                        
-          Np=5000,
-          Nmif=10,                        
-          cooling.fraction.50=0.25,        
-          rw.sd=rw_sd(Beta = 0.002, gamma = 0.002), 
-          partrans=parameter_trans(log=c("Beta","gamma")),
-          paramnames=c("Beta","gamma")
-        )
-    } %seed% TRUE |>
-      concat()
-  }
-) -> pfs_1
-
-attr(pfs,"system.time")
-
-## IF2 trace plots
-pfs_1|>
-  traces() |>
-  melt() |>
-  filter(name %in% c("Beta","sigma","gamma","loglik")) |>
-  ggplot(aes(x=iteration,y=value,group=.L1,color=factor(.L1)))+
-  geom_line()+
-  guides(color="none")+
-  facet_wrap(~name,scales="free_y")
+pairs(~loglik+Beta+sigma+gamma,data=results,pch=16)
 
 ## make a profile likelihood plot
 bind_cols(
