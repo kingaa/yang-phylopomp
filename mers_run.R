@@ -23,7 +23,7 @@ mers_pomp <- parse_newick(treeio::write.tree(x))
 
 pomp_obj <- twospecies_pomp(
   mers_pomp, # Parameters taken from example TODO: change
-  iota1=0.02,iota2=0.02,
+  c1=0.5,c2=0.5,
   Beta11=4,Beta12=1,
   Beta21=1,Beta22=4,
   gamma1=1,gamma2=1,
@@ -37,7 +37,7 @@ pomp_obj <- twospecies_pomp(
 
 
 twospecies_params <- data.frame(
-  iota1=0.02,iota2=0.02,
+  c1=0.5,c2=0.5,
   Beta11=4,Beta12=1,
   Beta21=1,Beta22=4,
   gamma1=1,gamma2=1,
@@ -47,7 +47,8 @@ twospecies_params <- data.frame(
   b1=0.1,b2=0.1,
   d1=0.1,d2=0.1,
   omega1=0.5,omega2=0.5,
-  time = 5.6512919 # max time seen in the tree
+  t0 = 0,
+  time = 5 # max time seen in the tree
 )
 
 
@@ -63,7 +64,7 @@ twospecies_params |>
   ) |>
   collect() -> params
 
-if (FALSE) { # pfilter
+if (TRUE) { # pfilter
   {
     library(iterators)
     library(doFuture)
@@ -75,7 +76,7 @@ if (FALSE) { # pfilter
     ) %dofuture% {
       library(phylopomp)
       pomp_obj |>
-        pfilter(params = p, Np = 1e4)
+        pfilter(params = p, Np = 1e3)
     } %seed% TRUE |>
       concat()
   } -> pfs
@@ -96,7 +97,7 @@ if (FALSE) { # pfilter
         Nmif = 10,
         cooling.fraction.50 = 0.25,
         rw.sd = rw_sd(
-          iota1 = 0.01, iota2 = 0.01,
+          c1 = 0.01, c2 = 0.01,
           Beta11 = 0.02, Beta12 = 0.02,
           Beta21 = 0.02, Beta22 = 0.02,
           gamma1 = 0.01, gamma2 = 0.01,
@@ -106,7 +107,7 @@ if (FALSE) { # pfilter
           omega1 = 0.01, omega2 = 0.01
         ),
         partrans = parameter_trans(
-          log = c("iota1", "iota2",
+          log = c("c1", "c2",
                   "Beta11", "Beta12", "Beta21", "Beta22",
                   "gamma1", "gamma2",
                   "psi1", "psi2",
@@ -114,7 +115,7 @@ if (FALSE) { # pfilter
                   "d1", "d2",
                   "omega1", "omega2")
         ),
-        paramnames = c("iota1", "iota2",
+        paramnames = c("c1", "c2",
                        "Beta11", "Beta12", "Beta21", "Beta22",
                        "gamma1", "gamma2",
                        "psi1", "psi2",
@@ -124,7 +125,23 @@ if (FALSE) { # pfilter
       )
   } %seed% TRUE |>
     concat()
-} -> pfs
+} -> mif2
 
-attr(pfs, "system.time")
-plot(pfs)
+
+
+
+saveRDS(pfs, file = "pfs_results.rds")
+saveRDS(pfs2, file = "pfilterList_object.rds")
+
+
+pfs_mif2 <- readRDS(file = "pfs_results.rds")
+
+pfs_particle <- readRDS(file = "pfilterList_object.rds")
+
+plot(pfs_particle)
+
+
+
+
+
+
