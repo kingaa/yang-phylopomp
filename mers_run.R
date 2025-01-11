@@ -5,7 +5,7 @@ library(tictoc)
 library(ape)
 theme_set(theme_bw())
 
-setwd('/home/pyang/projects/yang-phylopomp')
+#setwd('/home/pyang/projects/yang-phylopomp')
 
 
 
@@ -49,18 +49,22 @@ mers_pomp <- parse_newick(treeio::write.tree(x))
 #diagram(curtail(mers_pomp,0.5),prune=F,obscure=F)
 
 # can try curtailing from t = 1 in the range of around t = 2.5
+
+#TODO: try estimating a few, leave parameters fixed for now..
 pomp_obj <- twospecies_pomp(
   mers_pomp,
   c1 = 0, c2 = 0,
-  Beta11 = 4, Beta12 = 0, # Species 1 is camel # Beta12 is transmission from species 2 TO 1
-  Beta21 = 1, Beta22 = 0.5, # Species 2 is human
-  gamma1 = 1, gamma2 = 1,
+  Beta11 = 4 * 365, Beta12 = 0, # Species 1 is camel # Beta12 is transmission from species 2 TO 1
+  Beta21 = 1 * 365, Beta22 = 0.5 * 365, # Species 2 is human
+  gamma1 = 1 * 365, gamma2 = 1 * 365,
   b1 = 0, b2 = 0,
   d1 = 0, d2 = 0,
-  psi1 = 1, psi2 = 1,
-  omega1 = 0.5, omega2 = 0.5,
-  S1_0 = 300, I1_0 = 10, R1_0 = 10,
-  S2_0 = 300, I2_0 = 10, R2_0 = 10
+  psi1 = 0.5, psi2 = 0.5, # SAMPLING RATE, ESTIMATE
+  omega1 = 0.5 * 365, omega2 = 0.5 * 365,
+  S1_0 = 1500, I1_0 = 750, R1_0 = 0, # ESTIMATE population, leave it fixed for now
+  S2_0 = 63364, I2_0 = 0, R2_0 = 0, # ESTIMATE population
+  #S1_0 = 1500000, I1_0 = 750000, R1_0 = 0, # ESTIMATE population, leave it fixed for now
+  #S2_0 = 63364000, I2_0 = 0, R2_0 = 0 # ESTIMATE population
 )
 
 # Modify the tree to include root not at time 0, have some time before !!! IMPORTANT
@@ -74,28 +78,31 @@ pomp_obj <- twospecies_pomp(
 # Try increasing I
 
 
+# take a better look at interpreting model parameters, time scale matters.
 twospecies_params <- data.frame(
-  c1 = 0, c2 = 0,
-  Beta11 = 4, Beta12 = 0, # Species 1 is camel
-  Beta21 = 1, Beta22 = 0.5, # Species 2 is human
-  gamma1 = 1, gamma2 = 1,
+  c1 = 0, c2 = 0, # NOT ESTIMATING
+  Beta11 = 4 * 365, Beta12 = 0, # Species 1 is camel, probably ESTIMATE
+  Beta21 = 1 * 365, Beta22 = 0.5 * 365, # Species 2 is human, probably ESTIMATE
+  gamma1 = 1 * 365, gamma2 = 1 * 365, # recovery rate, ESTIMATE
   b1 = 0, b2 = 0,
   d1 = 0, d2 = 0,
-  psi1 = 1, psi2 = 1,
-  omega1 = 0.5, omega2 = 0.5,
-  S1_0 = 300, I1_0 = 10, R1_0 = 10,
-  S2_0 = 300, I2_0 = 10, R2_0 = 10,
+  psi1 = 0.5, psi2 = 0.5, # SAMPLING RATE, ESTIMATE
+  omega1 = 0.5 * 365, omega2 = 0.5 * 365, # Waning immunity, ESIMATE
+  S1_0 = 1500, I1_0 = 750, R1_0 = 0, # ESTIMATE population, leave it fixed for now
+  S2_0 = 63364, I2_0 = 0, R2_0 = 0, # ESTIMATE population
+  #S1_0 = 1500000, I1_0 = 0, R1_0 = 0, # ESTIMATE population, leave it fixed for now
+  #S2_0 = 63364000, I2_0 = 0, R2_0 = 0 # ESTIMATE population
   t0 = 0,
   time = max_time # max time seen in the tree
 )
 
 
 
+
 twospecies_params |>
-  select(-time, -Beta22) |>
+  select(-time) |>
   expand_grid(
-    rep = seq_len(5),
-    Beta22 = seq(0, 4, length.out = 50)
+    rep = seq_len(36),
   ) |>
   mutate(
     N1 = S1_0 + I1_0 + R1_0,
@@ -103,7 +110,18 @@ twospecies_params |>
   ) |>
   collect() -> params
 
+
 if (TRUE) { # pfilter
+  twospecies_params |>
+    select(-time, -Beta22) |>
+    expand_grid(
+      Beta22 = seq(1, 730, length.out = 36)
+    ) |>
+    mutate(
+      N1 = S1_0 + I1_0 + R1_0,
+      N2 = S2_0 + I2_0 + R2_0
+    ) |>
+    collect() -> params
   tic('pfilter')
   {
     library(iterators)
@@ -116,7 +134,7 @@ if (TRUE) { # pfilter
     ) %dofuture% {
       library(phylopomp)
       pomp_obj |>
-        pfilter(params = p, Np = 5000)
+        pfilter(params = p, Np = 100)
     } %seed% TRUE |>
       concat()
   } -> pfs
@@ -129,7 +147,7 @@ if (TRUE) { # pfilter
   ) -> params
   
   params |>
-      filter(is.finite(logLik)) |>
+    filter(is.finite(logLik)) |>
     with(
       mcap(logLik,Beta22,span=0.5)
     ) -> mcap
@@ -158,6 +176,8 @@ if (TRUE) { # pfilter
     ncol=1,
     rel_heights=c(1,1)
   )
+  
+  saveRDS(pfs, file = "pfilter_run.rds")
 }
 
 
@@ -166,77 +186,96 @@ if (TRUE) { # pfilter
 # 500 particles: 89 sec
 # 5000 particles: 930 sec
 
+# Get a sense of monte carlo error 
+
 # roughly linear
 
-attr(pfs,"system.time")
+# 
 
-if (TRUE){
-  tic('mif2')
+#attr(pfs,"system.time")
+
+if (TRUE) {
+  tic('mif2') # Start timing
+  
   { # mif2
     
     library(iterators)
     library(doFuture)
     plan(multisession)
-    foreach (
+    
+    foreach(
       p = iter(params, "row")
     ) %dofuture% {
       library(phylopomp)
+      
       pomp_obj |>
         mif2(
           params = p,
-          Np = 5000,
-          Nmif = 1,
+          Np = 500,
+          Nmif = 6,
           cooling.fraction.50 = 0.25,
           rw.sd = rw_sd(
-            c1 = 0.01, c2 = 0.01,
             Beta11 = 0.02, Beta12 = 0.02,
             Beta21 = 0.02, Beta22 = 0.02,
-            gamma1 = 0.01, gamma2 = 0.01,
-            psi1 = 0.01, psi2 = 0.01,
-            b1 = 0.01, b2 = 0.01,
-            d1 = 0.01, d2 = 0.01,
-            omega1 = 0.01, omega2 = 0.01
+            gamma1 = 0.02, gamma2 = 0.02,
+            omega1 = 0.02, omega2 = 0.02,
+            psi1 = 0.02, psi2 = 0.02
+            #S1_0 = ivp(0.2), I1_0 = ivp(0.2), R1_0 = ivp(0.2),
+            #S2_0 = ivp(0.2), I2_0 = ivp(0.2), R2_0 = ivp(0.2)
           ),
           partrans = parameter_trans(
-            log = c("c1", "c2",
-                    "Beta11", "Beta12", "Beta21", "Beta22",
-                    "gamma1", "gamma2",
-                    "psi1", "psi2",
-                    "b1", "b2",
-                    "d1", "d2",
-                    "omega1", "omega2")
+            log = c(
+              "Beta11", "Beta12", "Beta21", "Beta22",
+              "gamma1", "gamma2",
+              "omega1", "omega2"
+            ),
+            logit = c("psi1", "psi2"),
+            #barycentric = c("S1_0", "I1_0", "R1_0", "S2_0", "I2_0", "R2_0")
           ),
-          paramnames = c("c1", "c2",
-                         "Beta11", "Beta12", "Beta21", "Beta22",
-                         "gamma1", "gamma2",
-                         "psi1", "psi2",
-                         "b1", "b2",
-                         "d1", "d2",
-                         "omega1", "omega2")
+          paramnames = c(
+            "Beta11", "Beta12", "Beta21", "Beta22",
+            "gamma1", "gamma2",
+            "omega1", "omega2",
+            "psi1", "psi2"
+            #"S1_0", "I1_0", "R1_0",
+            #"S2_0", "I2_0", "R2_0"
+          )
         )
     } %seed% TRUE |>
       concat()
-  } -> mif2
-  toc()
+    
+  } -> mif2 # End mif2 block
+
+  toc() # End timing
+  
+  saveRDS(mif2, file = "pfs_results_total_pop.rds")
+  #saveRDS(pfs2, file = "pfilterList_object.rds")
+  
+  
+  pfs_mif2 <- readRDS(file = "pfs_results_total_pop.rds")
+  
+  #pfs_particle <- readRDS(file = "pfilterList_object.rds")
+  
+  #plot(pfs_particle)
+  
+  pfs_mif2|>
+    traces() |>
+    melt() |>
+    filter(name %in% c("Beta11","Beta12","Beta21","Beta22","gamma1","gamma2", "omega1", "omega2", "psi1", "psi2", "loglik")) |>
+    ggplot(aes(x=iteration,y=value,group=.L1,color=factor(.L1)))+
+    geom_line()+
+    guides(color="none")+
+    facet_wrap(~name,scales="free_y")
 }
 # keeping np = 5000,
 # nmif = 1
 # nmif = 2
 # nmif = 5
 
+# should reduce is to around 
+# Reduce the search a bit, and then 
+# keep params mutliple of 36
 
-
-
-
-saveRDS(pfs, file = "pfs_results.rds")
-saveRDS(pfs2, file = "pfilterList_object.rds")
-
-
-pfs_mif2 <- readRDS(file = "pfs_results.rds")
-
-pfs_particle <- readRDS(file = "pfilterList_object.rds")
-
-plot(pfs_particle)
 
 
 
