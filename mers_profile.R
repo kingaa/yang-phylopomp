@@ -36,8 +36,6 @@ pomp_obj <- twospecies_pomp(
   S2_0 = 5000, I2_0 = 0, R2_0 = 0 # ESTIMATE population
 )
 
-
-# take a better look at interpreting model parameters, time scale matters.
 twospecies_params <- data.frame(
   c1 = 1, c2 = 1,
   Beta11 = 18.25, Beta12 = 0, # Species 1 is camel 18.25 from paper # Beta12 is transmission from species 2 TO 1
@@ -122,10 +120,10 @@ np_particles = 5000
 saveRDS(mif2, file = "pfs_results_profile_reduced_pop.rds")
 
 num_runs <- 1
-# Set up parallel backend
+
 
 registerDoFuture()
-plan(multisession)  # Use all available cores
+plan(multisession)
 
 pfilter_results <- foreach(i = 1:180, .combine = 'rbind', .packages = c('pomp', 'phylopomp')) %:%
   foreach(j = 1:num_runs, .combine = 'rbind') %dopar% {

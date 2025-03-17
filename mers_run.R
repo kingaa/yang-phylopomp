@@ -13,8 +13,6 @@ setwd("~/projects/yang-phylopomp")
 
 
 i=16.2
-  
-  
 
 treeio::read.newick("MERS_274_sCoal.combinedTyped.mcc.newick") -> x
 
@@ -60,17 +58,15 @@ twospecies_params <- data.frame(
 )
 
 
-
-
 np_particles = 5000
 n_traj = 32
 nmif = 200
-perturb_sd = 0.005 # putting this above 0.01 leads to -inf ll
+perturb_sd = 0.005 # putting this above 0.01 leads to -inf ll trajectories
 cool_frac = 0.5
 twospecies_params |>
   select(-time, -Beta22) |>
   expand_grid(
-    Beta22 = seq(1, 365/100, length.out = n_traj)
+    Beta22 = seq(1, 365/100, length.out = n_traj) # starting beta22 too high leads to -inf ll trajectories
   ) |>
   mutate(
     N1 = S1_0 + I1_0 + R1_0,
@@ -99,7 +95,7 @@ tic("mif2")
         Nmif = nmif,
         cooling.fraction.50 = cool_frac,
         rw.sd = rw_sd(
-          Beta11 = perturb_sd, 
+          Beta11 = perturb_sd,
           Beta22 = perturb_sd,
           Beta21 = perturb_sd,
           #omega1 = 0.005, omega2 = 0.005,
@@ -128,7 +124,7 @@ tic("mif2")
   } %seed% TRUE |>
     concat()
   
-} -> mif2 
+} -> mif2
 toc()
 
 saveRDS(mif2, file = paste0("mif2_reduced_pop_results", i, k,".rds"))
@@ -161,9 +157,7 @@ ggsave(filename = paste0("mif2_reduced_pop_results", i, k, ".png"), plot = p, wi
 mif2 |>
   traces() |>
   melt() |>
-  # First filter to keep only the parameters we want
   filter(name %in% c("Beta11", "Beta21", "Beta22", "psi1", "psi2", "omega1", "omega2", "loglik")) |>
-  # Then remove specific points where loglik is -Inf
   filter(!(name == "loglik" & value == -Inf)) |>
   ggplot(aes(x = iteration, y = value, group = L1, color = factor(L1))) +
   geom_line() +
@@ -171,7 +165,7 @@ mif2 |>
   facet_wrap(~name, scales = "free_y")
 
 
-if (FALSE) {
+if (FALSE) { # pfilter
   mif2 |>
     traces() |>
     melt() |>
@@ -186,7 +180,7 @@ if (FALSE) {
   # Set up parallel backend
   
   registerDoFuture()
-  plan(multisession)  # Use all available cores
+  plan(multisession)  
   
   pfilter_results <- foreach(i = 1:36, .combine = 'rbind', .packages = c('pomp', 'phylopomp')) %:%
     foreach(j = 1:num_runs, .combine = 'rbind') %dopar% {
@@ -197,7 +191,6 @@ if (FALSE) {
   # Load ggplot2 library
   library(ggplot2)
   
-  # Convert pfilter_results matrix to a data frame
   results_df <- data.frame(Beta22 = pfilter_results[, 2], logLik = pfilter_results[, 1])
   
   # Plot using ggplot2

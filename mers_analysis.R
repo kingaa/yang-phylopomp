@@ -17,8 +17,8 @@ invalid_groups <- pfs_mif2 |>
   traces() |>
   melt() |>
   filter(name == "loglik", value == -Inf) |>
-  pull(.L1) |>  # Extract the .L1 values
-  unique()  # Keep only unique values
+  pull(.L1) |> 
+  unique()
 
 # Filter out entire trajectories belonging to these groups
 pfs_mif2 |>
@@ -37,11 +37,11 @@ pfs_mif2 |>
   filter(name == "loglik", iteration >= 50, iteration <= 200) |>
   ggplot(aes(x = iteration, y = value, group = .L1, color = factor(.L1))) +
   geom_line() +
-  guides(color = "none") 
+  guides(color = "none")
   
 treeio::read.newick("MERS_274_sCoal.combinedTyped.mcc.newick") -> x
 
-# Suppose pfs_mif2 is your mif2List object
+
 loglik_values <- sapply(pfs_mif2, logLik)  # Extract log-likelihoods
 
 # Get the indices of the top 5 log-likelihoods
@@ -51,9 +51,9 @@ top5_indices <- order(loglik_values, decreasing = TRUE)[1:5]
 top5_mif2 <- pfs_mif2[top5_indices]
 
 
-# Set up parallel backend
+
 registerDoFuture()
-plan(multisession)  # Use all available cores
+plan(multisession)  
 
 # Number of filtering runs per mif2 object
 num_runs <- 10
@@ -73,14 +73,14 @@ pfilter_df <- data.frame(
   LogLik = pfilter_results
 )
 
-# Calculate summary statistics for each model
-summary_stats <- aggregate(LogLik ~ Model, data = pfilter_df, 
+
+summary_stats <- aggregate(LogLik ~ Model, data = pfilter_df,
                            FUN = function(x) c(mean = mean(x), sd = sd(x), range = range(x)))
 
-# Display the results
+
 print(pfilter_df)
 print(summary_stats)
 
-# Close parallel backend
+
 plan(sequential)
 
